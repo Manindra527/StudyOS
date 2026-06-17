@@ -289,6 +289,12 @@ function Index() {
                       categories: w.categories.map((c) => (c.id === next.id ? next : c)),
                     }))
                   }
+                  onDelete={() =>
+                    updateWorkspace(active.id, (w) => ({
+                      ...w,
+                      categories: w.categories.filter((c) => c.id !== cat.id),
+                    }))
+                  }
                 />
               ))}
               <button

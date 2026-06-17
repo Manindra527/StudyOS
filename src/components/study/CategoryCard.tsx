@@ -11,6 +11,7 @@ interface Props {
   search: string;
   favoritesOnly: boolean;
   onChange: (next: Category) => void;
+  onDelete?: () => void;
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -30,7 +31,7 @@ function normalize(topics: Topic[]): Topic[] {
   });
 }
 
-export function CategoryCard({ category, search, favoritesOnly, onChange }: Props) {
+export function CategoryCard({ category, search, favoritesOnly, onChange, onDelete }: Props) {
   const c = colorMap[category.color];
   const Icon = iconMap[category.icon];
   const { total, done } = countTopics(category);
@@ -94,9 +95,20 @@ export function CategoryCard({ category, search, favoritesOnly, onChange }: Prop
             {category.name}
           </h3>
         </div>
-        <div className={`text-xs font-semibold rounded-full px-2.5 py-1 ${c.chipBg} ${c.chipText}`}>
-          {done}/{total}
-        </div>
+        <div className="flex items-center gap-2">
+          <div className={`text-xs font-semibold rounded-full px-2.5 py-1 ${c.chipBg} ${c.chipText}`}>
+            {done}/{total}
+          </div>
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="size-7 rounded-md grid place-items-center text-muted-foreground hover:text-destructive hover:bg-muted/80 transition-colors"
+              title="Delete category"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+        </div>   
       </div>
 
       {/* topics */}

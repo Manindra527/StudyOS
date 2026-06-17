@@ -20,7 +20,8 @@ import { workspaceProgress, countTopics, type Workspace } from "@/lib/study-type
 import { Uploader } from "@/components/study/Uploader";
 import { CategoryCard } from "@/components/study/CategoryCard";
 import { MentorChat } from "@/components/study/MentorChat";
-import { ConfirmDialog } from "@/components/study/InAppDialogs";
+import { ConfirmDialog, PromptDialog } from "@/components/study/InAppDialogs";
+import type { CategoryColor, CategoryIcon } from "@/lib/study-types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -57,6 +58,28 @@ function Index() {
   const [showFolder, setShowFolder] = useState(true);
   const [showInsights, setShowInsights] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
+  const [addCatOpen, setAddCatOpen] = useState(false);
+
+  const catColors: CategoryColor[] = ["amber", "sky", "peach", "mint", "rose", "violet"];
+  const catIcons: CategoryIcon[] = ["book", "brain", "target", "chart", "flask", "code", "pen", "globe"];
+
+  function addCategory(name: string) {
+    if (!active) return;
+    const idx = active.categories.length;
+    updateWorkspace(active.id, (w) => ({
+      ...w,
+      categories: [
+        ...w.categories,
+        {
+          id: Math.random().toString(36).slice(2, 10),
+          name,
+          color: catColors[idx % catColors.length],
+          icon: catIcons[idx % catIcons.length],
+          topics: [],
+        },
+      ],
+    }));
+  }
 
   const progress = useMemo(() => (active ? workspaceProgress(active) : null), [active]);
 
@@ -268,6 +291,16 @@ function Index() {
                   }
                 />
               ))}
+              <button
+                onClick={() => setAddCatOpen(true)}
+                className="rounded-2xl border-2 border-dashed border-border bg-card/50 hover:bg-card hover:border-primary transition-colors p-6 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary min-h-[180px]"
+              >
+                <div className="size-12 rounded-xl bg-muted grid place-items-center">
+                  <Plus className="size-6" />
+                </div>
+                <div className="font-semibold text-sm">Add Category</div>
+                <div className="text-xs">Create a new section for this subject</div>
+              </button>
             </div>
 
             {/* How it works */}
@@ -302,6 +335,15 @@ function Index() {
         onOpenChange={(o) => {
           if (!o) setPendingDelete(null);
         }}
+      />
+
+      <PromptDialog
+        open={addCatOpen}
+        title="Add category"
+        placeholder="Category name"
+        confirmLabel="Create"
+        onSubmit={(name) => addCategory(name)}
+        onOpenChange={setAddCatOpen}
       />
     </div>
   );

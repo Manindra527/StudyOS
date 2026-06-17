@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Pencil, MoreVertical, Star, Check, Clock, Trash2, X } from "lucide-react";
 import type { Category, Topic } from "@/lib/study-types";
 import { countTopics } from "@/lib/study-types";
@@ -21,6 +21,15 @@ function matches(t: Topic, q: string): boolean {
   return t.subtopics.some((s) => matches(s, q));
 }
 
+// Bottom-up: a topic with subtopics is auto-done iff every subtopic is done.
+function normalize(topics: Topic[]): Topic[] {
+  return topics.map((t) => {
+    const subs = normalize(t.subtopics);
+    const done = subs.length > 0 ? subs.every((s) => s.done) : t.done;
+    return { ...t, subtopics: subs, done };
+  });
+}
+
 export function CategoryCard({ category, search, favoritesOnly, onChange }: Props) {
   const c = colorMap[category.color];
   const Icon = iconMap[category.icon];
@@ -40,13 +49,13 @@ export function CategoryCard({ category, search, favoritesOnly, onChange }: Prop
         if (t.id === id) return updater(t);
         return { ...t, subtopics: walk(t.subtopics) };
       });
-    onChange({ ...category, topics: walk(category.topics) });
+     onChange({ ...category, topics: normalize(walk(category.topics)) });
   }
 
   function deleteTopic(id: string) {
     const walk = (ts: Topic[]): Topic[] =>
       ts.filter((t) => t.id !== id).map((t) => ({ ...t, subtopics: walk(t.subtopics) }));
-    onChange({ ...category, topics: walk(category.topics) });
+    onChange({ ...category, topics: normalize(walk(category.topics)) });
   }
 
   function addSubtopic(parentId: string | null) {
@@ -65,7 +74,7 @@ export function CategoryCard({ category, search, favoritesOnly, onChange }: Prop
         if (t.id === parentId) return { ...t, subtopics: [...t.subtopics, newTopic] };
         return { ...t, subtopics: walk(t.subtopics) };
       });
-    onChange({ ...category, topics: walk(category.topics) });
+    onChange({ ...category, topics: normalize(walk(category.topics)) });
   }
 
   return (
@@ -173,6 +182,11 @@ function TopicRow({
   const [val, setVal] = useState(topic.name);
   const [open, setOpen] = useState(topic.subtopics.length > 0);
   const [menu, setMenu] = useState(false);
+
+// Auto-open when a subtopic is added so it appears immediately.
+  useEffect(() => {
+    if (topic.subtopics.length > 0) setOpen(true);
+  }, [topic.subtopics.length]);
 
   return (
     <div className="rounded-xl hover:bg-muted/60 transition-colors">

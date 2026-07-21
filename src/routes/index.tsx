@@ -2,6 +2,24 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  DragOverlay,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Home,
   ListChecks,
   BarChart3,
@@ -276,38 +294,27 @@ function Index() {
             </div>
 
             {/* Categories grid */}
-            <div className="grid gap-5 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-              {active.categories.map((cat) => (
-                <CategoryCard
-                  key={cat.id}
-                  category={cat}
-                  search={search}
-                  favoritesOnly={favOnly}
-                  onChange={(next) =>
-                    updateWorkspace(active.id, (w) => ({
-                      ...w,
-                      categories: w.categories.map((c) => (c.id === next.id ? next : c)),
-                    }))
-                  }
-                  onDelete={() =>
-                    updateWorkspace(active.id, (w) => ({
-                      ...w,
-                      categories: w.categories.filter((c) => c.id !== cat.id),
-                    }))
-                  }
-                />
-              ))}
-              <button
-                onClick={() => setAddCatOpen(true)}
-                className="rounded-2xl border-2 border-dashed border-border bg-card/50 hover:bg-card hover:border-primary transition-colors p-6 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary min-h-[180px]"
-              >
-                <div className="size-12 rounded-xl bg-muted grid place-items-center">
-                  <Plus className="size-6" />
-                </div>
-                <div className="font-semibold text-sm">Add Category</div>
-                <div className="text-xs">Create a new section for this subject</div>
-              </button>
-            </div>
+            <CategoriesBoard
+              workspace={active}
+              search={search}
+              favOnly={favOnly}
+              onReorder={(next) =>
+                updateWorkspace(active.id, (w) => ({ ...w, categories: next }))
+              }
+              onChange={(next) =>
+                updateWorkspace(active.id, (w) => ({
+                  ...w,
+                  categories: w.categories.map((c) => (c.id === next.id ? next : c)),
+                }))
+              }
+              onDeleteCat={(id) =>
+                updateWorkspace(active.id, (w) => ({
+                  ...w,
+                  categories: w.categories.filter((c) => c.id !== id),
+                }))
+              }
+              onAddCat={() => setAddCatOpen(true)}
+            />
 
             {/* How it works */}
             <div className="mt-8 rounded-2xl border border-border bg-accent/40 p-5 flex items-start gap-4">
@@ -350,6 +357,146 @@ function Index() {
         confirmLabel="Create"
         onSubmit={(name) => addCategory(name)}
         onOpenChange={setAddCatOpen}
+      />
+    </div>
+  );
+}
+
+function CategoriesBoard({
+  workspace,
+  search,
+  favOnly,
+  onReorder,
+  onChange,
+  onDeleteCat,
+  onAddCat,
+}: {
+  workspace: Workspace;
+  search: string;
+  favOnly: boolean;
+  onReorder: (next: import("@/lib/study-types").Category[]) => void;
+  onChange: (next: import("@/lib/study-types").Category) => void;
+  onDeleteCat: (id: string) => void;
+  onAddCat: () => void;
+}) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 220, tolerance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 220, tolerance: 6 },
+    }),
+  );
+  const items = workspace.categories;
+  const activeCat = items.find((c) => c.id === activeId) || null;
+
+  function handleStart(e: DragStartEvent) {
+    setActiveId(String(e.active.id));
+  }
+  function handleEnd(e: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex((c) => c.id === active.id);
+    const newIndex = items.findIndex((c) => c.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onReorder(arrayMove(items, oldIndex, newIndex));
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleStart}
+      onDragEnd={handleEnd}
+      onDragCancel={() => setActiveId(null)}
+    >
+      <SortableContext items={items.map((c) => c.id)} strategy={rectSortingStrategy}>
+        <div className="grid gap-5 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+          {items.map((cat) => (
+            <SortableCategory
+              key={cat.id}
+              cat={cat}
+              search={search}
+              favOnly={favOnly}
+              onChange={onChange}
+              onDelete={() => onDeleteCat(cat.id)}
+            />
+          ))}
+          <button
+            onClick={onAddCat}
+            className="rounded-2xl border-2 border-dashed border-border bg-card/50 hover:bg-card hover:border-primary transition-colors p-6 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary min-h-[180px]"
+          >
+            <div className="size-12 rounded-xl bg-muted grid place-items-center">
+              <Plus className="size-6" />
+            </div>
+            <div className="font-semibold text-sm">Add Category</div>
+            <div className="text-xs">Create a new section for this subject</div>
+          </button>
+        </div>
+      </SortableContext>
+      <DragOverlay
+        adjustScale={false}
+        dropAnimation={{
+          duration: 260,
+          easing: "cubic-bezier(0.2, 0, 0, 1)",
+        }}
+      >
+        {activeCat ? (
+          <div className="scale-[1.03] rotate-[0.5deg] opacity-95">
+            <CategoryCard
+              category={activeCat}
+              search={search}
+              favoritesOnly={favOnly}
+              onChange={() => {}}
+              isDragging
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+function SortableCategory({
+  cat,
+  search,
+  favOnly,
+  onChange,
+  onDelete,
+}: {
+  cat: import("@/lib/study-types").Category;
+  search: string;
+  favOnly: boolean;
+  onChange: (next: import("@/lib/study-types").Category) => void;
+  onDelete: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: cat.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition ?? "transform 260ms cubic-bezier(0.2, 0, 0, 1)",
+    zIndex: isDragging ? 50 : "auto",
+    opacity: isDragging ? 0 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <CategoryCard
+        category={cat}
+        search={search}
+        favoritesOnly={favOnly}
+        onChange={onChange}
+        onDelete={onDelete}
+        dragHandleProps={{ ...attributes, ...(listeners as React.HTMLAttributes<HTMLElement>) }}
       />
     </div>
   );

@@ -12,6 +12,8 @@ interface Props {
   favoritesOnly: boolean;
   onChange: (next: Category) => void;
   onDelete?: () => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+  isDragging?: boolean;
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -31,7 +33,7 @@ function normalize(topics: Topic[]): Topic[] {
   });
 }
 
-export function CategoryCard({ category, search, favoritesOnly, onChange, onDelete }: Props) {
+export function CategoryCard({ category, search, favoritesOnly, onChange, onDelete, dragHandleProps, isDragging }: Props) {
   const c = colorMap[category.color];
   const Icon = iconMap[category.icon];
   const { total, done } = countTopics(category);
@@ -50,7 +52,7 @@ export function CategoryCard({ category, search, favoritesOnly, onChange, onDele
         if (t.id === id) return updater(t);
         return { ...t, subtopics: walk(t.subtopics) };
       });
-     onChange({ ...category, topics: normalize(walk(category.topics)) });
+    onChange({ ...category, topics: normalize(walk(category.topics)) });
   }
 
   function deleteTopic(id: string) {
@@ -80,13 +82,18 @@ export function CategoryCard({ category, search, favoritesOnly, onChange, onDele
 
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden flex flex-col"
+      className={`rounded-2xl bg-card border border-border overflow-hidden flex flex-col transition-shadow ${
+        isDragging ? "shadow-2xl ring-1 ring-primary/30" : "shadow-sm"
+      }`}
     >
       {/* header */}
-      <div className={`flex items-center justify-between px-5 py-4 ${c.bg}`}>
+      <div
+        {...(dragHandleProps || {})}
+        className={`flex items-center justify-between px-5 py-4 ${c.bg} ${dragHandleProps ? "cursor-grab active:cursor-grabbing select-none touch-none" : ""}`}
+        title={dragHandleProps ? "Long-press to drag" : undefined}
+      >
         <div className="flex items-center gap-3 min-w-0">
           <div className={`size-10 rounded-xl grid place-items-center ${c.iconBg} ${c.iconText}`}>
             <Icon className="size-5" />
@@ -108,7 +115,7 @@ export function CategoryCard({ category, search, favoritesOnly, onChange, onDele
               <Trash2 className="size-3.5" />
             </button>
           )}
-        </div>   
+        </div>
       </div>
 
       {/* topics */}
@@ -195,7 +202,7 @@ function TopicRow({
   const [open, setOpen] = useState(topic.subtopics.length > 0);
   const [menu, setMenu] = useState(false);
 
-// Auto-open when a subtopic is added so it appears immediately.
+  // Auto-open when a subtopic is added so it appears immediately.
   useEffect(() => {
     if (topic.subtopics.length > 0) setOpen(true);
   }, [topic.subtopics.length]);

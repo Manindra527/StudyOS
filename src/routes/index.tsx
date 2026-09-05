@@ -539,9 +539,16 @@ function FolderView({
   onNew: () => void;
 }) {
   const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
   const filtered = workspaces.filter((w) =>
-    w.title.toLowerCase().includes(q.toLowerCase()),
+    [w.section, w.title, w.subtitle].some((value) => value.toLowerCase().includes(query)),
   );
+  const grouped = filtered.reduce<Record<string, Workspace[]>>((groups, workspace) => {
+    const section = workspace.section || "OTHER";
+    (groups[section] ||= []).push(workspace);
+    return groups;
+  }, {});
+  const sections = Object.entries(grouped);
   return (
     <div className="p-8 max-w-[1600px] mx-auto">
       <div className="flex items-start justify-between gap-6 flex-wrap mb-8">
@@ -550,7 +557,7 @@ function FolderView({
             <Folder className="size-8 text-primary" /> All Subjects
           </h1>
           <p className="text-muted-foreground mt-2">
-            {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"} in your folder
+            {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"} organized by section
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -559,7 +566,7 @@ function FolderView({
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search subjects…"
+              placeholder="Search sections or subjects…"
               className="w-64 bg-card border border-border rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none focus:ring-2 ring-primary"
             />
           </div>
@@ -585,59 +592,78 @@ function FolderView({
           </div>
         </div>
       ) : (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((w) => {
-            const p = workspaceProgress(w);
-            const isActive = w.id === activeId;
-            return (
-              <motion.div
-                key={w.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`group bg-card border rounded-2xl p-5 flex flex-col gap-3 ${
-                  isActive ? "border-primary" : "border-border"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <button
-                    onClick={() => onOpen(w.id)}
-                    className="flex-1 text-left min-w-0"
-                  >
-                    <div className="font-semibold truncate text-foreground">{w.title}</div>
-                    {w.subtitle && (
-                      <div className="text-xs text-muted-foreground truncate mt-0.5">
-                        {w.subtitle}
+        <div className="space-y-10">
+          {sections.map(([section, sectionWorkspaces]) => (
+            <section key={section} aria-labelledby={`section-${section}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <h2
+                  id={`section-${section}`}
+                  className="text-sm font-bold tracking-[0.16em] text-foreground"
+                >
+                  {section.toUpperCase()}
+                </h2>
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">
+                  {sectionWorkspaces.length} {sectionWorkspaces.length === 1 ? "subject" : "subjects"}
+                </span>
+              </div>
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {sectionWorkspaces.map((w) => {
+                  const p = workspaceProgress(w);
+                  const isActive = w.id === activeId;
+                  return (
+                    <motion.div
+                      key={w.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`group bg-card border rounded-2xl p-5 flex flex-col gap-3 ${
+                        isActive ? "border-primary" : "border-border"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          onClick={() => onOpen(w.id)}
+                          className="flex-1 text-left min-w-0"
+                        >
+                          <div className="font-semibold truncate text-foreground">{w.title}</div>
+                          {w.subtitle && (
+                            <div className="text-xs text-muted-foreground truncate mt-0.5">
+                              {w.subtitle}
+                            </div>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => onDelete(w.id, w.title)}
+                          className="opacity-0 group-hover:opacity-100 size-8 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-destructive"
+                          title={`Delete ${w.title}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
                       </div>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => onDelete(w.id, w.title)}
-                    className="opacity-0 group-hover:opacity-100 size-8 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-destructive"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {w.categories.length} categories · {p.done}/{p.total} topics
-                </div>
-                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-primary to-[oklch(0.7_0.2_165)]"
-                    style={{ width: `${p.pct}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{p.pct}% complete</span>
-                  <button
-                    onClick={() => onOpen(w.id)}
-                    className="font-semibold text-primary hover:underline"
-                  >
-                    Open →
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
+                      <div className="text-xs text-muted-foreground">
+                        {w.categories.length} categories · {p.done}/{p.total} topics
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary to-[oklch(0.7_0.2_165)]"
+                          style={{ width: `${p.pct}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">{p.pct}% complete</span>
+                        <button
+                          onClick={() => onOpen(w.id)}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          Open →
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </div>

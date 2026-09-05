@@ -29,6 +29,7 @@ export interface Category {
 
 export interface Workspace {
   id: string;
+  section: string;
   title: string;
   subtitle: string;
   createdAt: number;
@@ -48,9 +49,17 @@ export interface RawAnalysis {
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-export function fromRaw(raw: RawAnalysis): Workspace {
+export const DEFAULT_SECTION = "OTHER";
+
+export function normalizeSection(section: string | undefined | null): string {
+  const normalized = section?.trim().replace(/\s+/g, " ").toUpperCase();
+  return normalized || DEFAULT_SECTION;
+}
+
+export function fromRaw(raw: RawAnalysis, section = DEFAULT_SECTION): Workspace {
   return {
     id: uid(),
+    section: normalizeSection(section),
     title: raw.title || "Untitled",
     subtitle: raw.subtitle || "",
     createdAt: Date.now(),

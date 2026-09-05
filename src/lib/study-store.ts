@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Workspace, Topic } from "./study-types";
+import { normalizeSection, type Workspace, type Topic } from "./study-types";
 
 const KEY = "study-os:workspaces";
 const ACTIVE_KEY = "study-os:active";
@@ -7,7 +7,12 @@ const ACTIVE_KEY = "study-os:active";
 function load(): Workspace[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(KEY) || "[]");
+    const parsed = JSON.parse(localStorage.getItem(KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((workspace) => ({
+      ...workspace,
+      section: normalizeSection(workspace?.section),
+    }));
   } catch {
     return [];
   }

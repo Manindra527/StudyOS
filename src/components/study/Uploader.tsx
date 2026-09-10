@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Upload, FileText, Image as ImageIcon, Sparkles, Loader2 } from "lucide-react";
 import { fromRaw, type RawAnalysis } from "@/lib/study-types";
 import type { Workspace } from "@/lib/study-types";
+import { readApiError } from "@/lib/user-facing-errors";
 
 interface Props {
   onWorkspace: (w: Workspace) => void;
@@ -41,12 +42,30 @@ export function Uploader({ onWorkspace }: Props) {
   const [dragging, setDragging] = useState(false);
   const [sectionChoice, setSectionChoice] = useState("");
   const [customSection, setCustomSection] = useState("");
+  const [lastFile, setLastFile] = useState<File | null>(null);
 
   const section = (sectionChoice === CREATE_NEW ? customSection : sectionChoice).trim();
   const canUpload = section.length > 0;
 
   async function handleFile(file: File) {
     setError(null);
+    const supported =
+      file.type.startsWith("image/") ||
+      [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+        "text/plain",
+        "text/markdown",
+      ].includes(file.type);
+    if (!supported) {
+      setError("This file type isn't supported. Please upload an image, PDF, Word, PowerPoint, or Excel file.");
+      return;
+    }
     if (!canUpload) {
       setError("Choose a section before uploading your study material.");
       return;
@@ -55,6 +74,7 @@ export function Uploader({ onWorkspace }: Props) {
       setError("File too large. Maximum size is 10 MB.");
       return;
     }
+    setLastFile(file);
     setLoading(true);
     try {
       const dataUrl = await fileToDataUrl(file);
@@ -68,16 +88,16 @@ export function Uploader({ onWorkspace }: Props) {
         }),
       });
       if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t || "Analysis failed");
+        throw new Error(await readApiError(res, "We couldn't organize this file. Please try again."));
       }
       const raw = (await res.json()) as RawAnalysis;
       if (!raw.categories || raw.categories.length === 0) {
-        throw new Error("AI could not detect structure. Try a clearer document.");
+        throw new Error("We couldn't organize this file. Please try again.");
       }
       onWorkspace(fromRaw(raw, section));
-    } catch (e: any) {
-      setError(e.message || "Something went wrong");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Upload failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -183,8 +203,17 @@ export function Uploader({ onWorkspace }: Props) {
             </span>
           </div>
           {error && (
-            <div className="text-sm text-destructive bg-destructive/10 rounded-lg px-4 py-2 mt-2">
-              {error}
+            <div className="text-sm text-destructive bg-destructive/10 rounded-lg px-4 py-3 mt-2 flex flex-wrap items-center justify-center gap-3">
+              <span>{error}</span>
+              {lastFile && error !== "This file type isn't supported. Please upload an image, PDF, Word, PowerPoint, or Excel file." && (
+                <button
+                  type="button"
+                  onClick={() => void handleFile(lastFile)}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Retry
+                </button>
+              )}
             </div>
           )}
         </div>

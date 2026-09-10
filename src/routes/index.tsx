@@ -30,15 +30,17 @@ import {
   Filter,
   Target,
   Plus,
+  Pencil,
   Trash2,
   Sparkles,
 } from "lucide-react";
 import { useWorkspaces } from "@/lib/study-store";
-import { workspaceProgress, countTopics, type Workspace } from "@/lib/study-types";
+import { normalizeSection, workspaceProgress, countTopics, type Workspace } from "@/lib/study-types";
 import { Uploader } from "@/components/study/Uploader";
 import { CategoryCard } from "@/components/study/CategoryCard";
 import { MentorChat } from "@/components/study/MentorChat";
 import { ConfirmDialog, PromptDialog } from "@/components/study/InAppDialogs";
+import { SettingsView } from "@/components/study/SettingsView";
 import type { CategoryColor, CategoryIcon } from "@/lib/study-types";
 
 export const Route = createFileRoute("/")({
@@ -67,14 +69,17 @@ function Index() {
     active,
     addWorkspace,
     updateWorkspace,
+    renameSection,
     removeWorkspace,
     selectWorkspace,
+    restoreWorkspaces,
   } = useWorkspaces();
   const [search, setSearch] = useState("");
   const [favOnly, setFavOnly] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
   const [showFolder, setShowFolder] = useState(true);
   const [showInsights, setShowInsights] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const [addCatOpen, setAddCatOpen] = useState(false);
 
@@ -115,6 +120,7 @@ function Index() {
             setShowUploader(true);
             setShowFolder(false);
             setShowInsights(false);
+            setShowSettings(false);
           }}
         />
         <SideIcon
@@ -124,6 +130,7 @@ function Index() {
             setShowUploader(false);
             setShowFolder(false);
             setShowInsights(false);
+            setShowSettings(false);
           }}
         />
         <SideIcon
@@ -133,6 +140,7 @@ function Index() {
             setShowInsights(true);
             setShowFolder(false);
             setShowUploader(false);
+            setShowSettings(false);
           }}
         />
         <SideIcon
@@ -141,15 +149,32 @@ function Index() {
           onClick={() => {
             setShowFolder(true);
             setShowInsights(false);
+            setShowSettings(false);
           }}
         />
         <div className="flex-1" />
-        <SideIcon icon={Settings} />
+        <SideIcon
+          icon={Settings}
+          label="Settings"
+          active={showSettings}
+          onClick={() => {
+            setShowSettings(true);
+            setShowFolder(false);
+            setShowInsights(false);
+            setShowUploader(false);
+          }}
+        />
       </aside>
 
       {/* Main */}
       <main className="flex-1 min-w-0">
-        {showInsights ? (
+        {showSettings ? (
+          <SettingsView
+            workspaces={workspaces}
+            activeWorkspaceId={active?.id || null}
+            onRestore={restoreWorkspaces}
+          />
+        ) : showInsights ? (
           <InsightsView workspaces={workspaces} />
         ) : showFolder ? (
           <FolderView
@@ -161,6 +186,10 @@ function Index() {
               setShowUploader(false);
             }}
             onDelete={(id, title) => setPendingDelete({ id, title })}
+            onRenameSection={(section, nextSection) => {
+              const normalized = normalizeSection(nextSection);
+              if (normalized !== section) renameSection(section, normalized);
+            }}
             onNew={() => {
               setShowFolder(false);
               setShowUploader(true);
@@ -190,45 +219,6 @@ function Index() {
                 setShowUploader(false);
               }}
             />
-            {workspaces.length > 0 && (
-              <div className="mt-10 w-full max-w-3xl">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-                  Your workspaces
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {workspaces.map((w) => {
-                    const p = workspaceProgress(w);
-                    return (
-                      <div
-                        key={w.id}
-                        className="group bg-card border border-border rounded-2xl p-4 flex items-center gap-3"
-                      >
-                        <button
-                          onClick={() => {
-                            selectWorkspace(w.id);
-                            setShowUploader(false);
-                          }}
-                          className="flex-1 text-left min-w-0"
-                        >
-                          <div className="font-semibold truncate">{w.title}</div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {w.categories.length} categories · {p.pct}% complete
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setPendingDelete({ id: w.id, title: w.title });
-                          }}
-                          className="opacity-0 group-hover:opacity-100 size-8 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-destructive"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <div className="p-8 max-w-[1600px] mx-auto">
@@ -504,16 +494,19 @@ function SortableCategory({
 
 function SideIcon({
   icon: Icon,
+  label,
   active,
   onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
+  label?: string;
   active?: boolean;
   onClick?: () => void;
 }) {
   return (
     <button
       onClick={onClick}
+      aria-label={label}
       className={`size-10 rounded-xl grid place-items-center transition-colors ${
         active
           ? "bg-accent text-accent-foreground"
@@ -530,15 +523,19 @@ function FolderView({
   activeId,
   onOpen,
   onDelete,
+  onRenameSection,
   onNew,
 }: {
   workspaces: Workspace[];
   activeId?: string;
   onOpen: (id: string) => void;
   onDelete: (id: string, title: string) => void;
+  onRenameSection: (section: string, nextSection: string) => void;
   onNew: () => void;
 }) {
   const [q, setQ] = useState("");
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [sectionDraft, setSectionDraft] = useState("");
   const query = q.trim().toLowerCase();
   const filtered = workspaces.filter((w) =>
     [w.section, w.title, w.subtitle].some((value) => value.toLowerCase().includes(query)),
@@ -596,12 +593,45 @@ function FolderView({
           {sections.map(([section, sectionWorkspaces]) => (
             <section key={section} aria-labelledby={`section-${section}`}>
               <div className="flex items-center gap-3 mb-4">
-                <h2
-                  id={`section-${section}`}
-                  className="text-sm font-bold tracking-[0.16em] text-foreground"
-                >
-                  {section.toUpperCase()}
-                </h2>
+                {editingSection === section ? (
+                  <input
+                    autoFocus
+                    value={sectionDraft}
+                    onChange={(event) => setSectionDraft(event.target.value.toUpperCase())}
+                    onBlur={() => {
+                      const nextSection = normalizeSection(sectionDraft);
+                      if (nextSection) onRenameSection(section, nextSection);
+                      setEditingSection(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                      if (event.key === "Escape") setEditingSection(null);
+                    }}
+                    aria-label={`Edit ${section} section name`}
+                    className="w-44 border-b border-primary bg-transparent text-sm font-bold tracking-[0.16em] text-foreground uppercase outline-none"
+                  />
+                ) : (
+                  <>
+                    <h2
+                      id={`section-${section}`}
+                      className="text-sm font-bold tracking-[0.16em] text-foreground"
+                    >
+                      {section.toUpperCase()}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSection(section);
+                        setSectionDraft(section);
+                      }}
+                      className="size-7 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title={`Edit ${section} section`}
+                      aria-label={`Edit ${section} section`}
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                  </>
+                )}
                 <div className="h-px flex-1 bg-border" />
                 <span className="text-xs text-muted-foreground">
                   {sectionWorkspaces.length} {sectionWorkspaces.length === 1 ? "subject" : "subjects"}

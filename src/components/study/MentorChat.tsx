@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, Send, Loader2 } from "lucide-react";
 import type { Workspace } from "@/lib/study-types";
+import { readApiError } from "@/lib/user-facing-errors";
 
 interface Msg {
   role: "user" | "assistant";
@@ -15,12 +16,19 @@ export function MentorChat({ workspace }: { workspace: Workspace | null }) {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastRequest, setLastRequest] = useState<Msg[] | null>(null);
 
-  async function send() {
-    if (!input.trim() || loading) return;
-    const next: Msg[] = [...msgs, { role: "user", content: input.trim() }];
-    setMsgs(next);
-    setInput("");
+  async function send(requestMessages?: Msg[]) {
+    if (loading) return;
+    const next = requestMessages ?? [...msgs, { role: "user", content: input.trim() }];
+    if (!requestMessages && !input.trim()) return;
+    setError(null);
+    if (!requestMessages) {
+      setMsgs(next);
+      setInput("");
+    }
+    setLastRequest(next);
     setLoading(true);
     try {
       const ctx = workspace
@@ -37,10 +45,15 @@ export function MentorChat({ workspace }: { workspace: Workspace | null }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next, context: ctx }),
       });
-      const j = await res.json();
-      setMsgs([...next, { role: "assistant", content: j.text || "…" }]);
-    } catch {
-      setMsgs([...next, { role: "assistant", content: "Sorry, I couldn't reach the AI." }]);
+      if (!res.ok) {
+        throw new Error(await readApiError(res, "AI Mentor is temporarily unavailable. Please try again."));
+      }
+      const j = (await res.json()) as { success?: boolean; data?: { text?: string } };
+      setMsgs([...next, { role: "assistant", content: j.data?.text || "I’m ready when you are." }]);
+      setLastRequest(null);
+    } catch (e) {
+      console.error(e);
+      setError("AI Mentor is temporarily unavailable. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -107,6 +120,20 @@ export function MentorChat({ workspace }: { workspace: Workspace | null }) {
                     <Loader2 className="size-3.5 animate-spin" /> Thinking…
                   </div>
                 )}
+                {error && (
+                  <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                    <div>{error}</div>
+                    {lastRequest && (
+                      <button
+                        type="button"
+                        onClick={() => void send(lastRequest)}
+                        className="mt-2 font-semibold underline underline-offset-2"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="p-3 border-t border-border flex items-center gap-2">
                 <input
@@ -117,7 +144,7 @@ export function MentorChat({ workspace }: { workspace: Workspace | null }) {
                   className="flex-1 bg-muted rounded-full px-4 py-2.5 text-sm outline-none focus:ring-2 ring-primary"
                 />
                 <button
-                  onClick={send}
+                  onClick={() => void send()}
                   disabled={loading}
                   className="size-10 rounded-full bg-primary text-primary-foreground grid place-items-center disabled:opacity-50"
                 >

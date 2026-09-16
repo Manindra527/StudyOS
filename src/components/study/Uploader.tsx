@@ -94,7 +94,7 @@ export function Uploader({ onWorkspace }: Props) {
       if (!raw.categories || raw.categories.length === 0) {
         throw new Error("We couldn't organize this file. Please try again.");
       }
-      onWorkspace(fromRaw(raw, section));
+      onWorkspace(fromRaw(raw, section, { name: file.name, mimeType: file.type || "application/octet-stream", size: file.size, uploadedAt: new Date().toISOString() }));
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : "Upload failed. Please try again.");

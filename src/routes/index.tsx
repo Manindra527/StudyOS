@@ -73,6 +73,7 @@ function Index() {
     removeWorkspace,
     selectWorkspace,
     restoreWorkspaces,
+    exportData,
   } = useWorkspaces();
   const [search, setSearch] = useState("");
   const [favOnly, setFavOnly] = useState(false);
@@ -173,6 +174,7 @@ function Index() {
             workspaces={workspaces}
             activeWorkspaceId={active?.id || null}
             onRestore={restoreWorkspaces}
+            onExport={exportData}
           />
         ) : showInsights ? (
           <InsightsView workspaces={workspaces} />
@@ -767,7 +769,7 @@ function InsightsView({ workspaces }: { workspaces: Workspace[] }) {
                     animate={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <div className="flex flex-wrap gap-1.5 mt-2">what
                   {w.categories.map((c) => {
                     const r = countTopics(c);
                     const cp = r.total ? Math.round((r.done / r.total) * 100) : 0;

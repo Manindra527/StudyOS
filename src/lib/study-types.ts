@@ -34,6 +34,7 @@ export interface Workspace {
   subtitle: string;
   createdAt: number;
   categories: Category[];
+  uploadedFile?: { name: string; mimeType?: string; size?: number; uploadedAt?: string };
 }
 
 export interface RawAnalysis {
@@ -56,7 +57,7 @@ export function normalizeSection(section: string | undefined | null): string {
   return normalized || DEFAULT_SECTION;
 }
 
-export function fromRaw(raw: RawAnalysis, section = DEFAULT_SECTION): Workspace {
+export function fromRaw(raw: RawAnalysis, section = DEFAULT_SECTION, uploadedFile?: Workspace["uploadedFile"]): Workspace {
   return {
     id: uid(),
     section: normalizeSection(section),
@@ -82,6 +83,7 @@ export function fromRaw(raw: RawAnalysis, section = DEFAULT_SECTION): Workspace 
         })),
       })),
     })),
+    ...(uploadedFile ? { uploadedFile } : {}),
   };
 }
 

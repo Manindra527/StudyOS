@@ -83,6 +83,42 @@ const analysisSchema = {
 };
 const analysisError = (res, status, code, message) => res.status(status).json({ success: false, error: { code, message } });
 const supportedMimeTypes = new Set(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "text/plain", "text/markdown"]);
+const PRIMARY_GEMINI_MODEL = "gemini-2.5-flash";
+const FALLBACK_GEMINI_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash-lite";
+const RETRY_DELAYS_MS = [250, 500];
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const isRetryableGeminiError = (error) => {
+  const status = Number(error?.status || error?.response?.status);
+  const message = String(error?.message || "").toLowerCase();
+  return [429, 500, 502, 503, 504].includes(status) || message.includes("high demand") || message.includes("overload") || message.includes("temporar");
+};
+
+async function analyzeWithGemini({ fileName, mimeType, dataUrl }) {
+  const prompt = `Create a concise Study OS dashboard from ${fileName}. Group the material into 2-6 useful categories. Topics must be short, and subtopics must be strings. Return a JSON object exactly shaped as: {"title":"string","subtitle":"string","categories":[{"name":"string","icon":"book","color":"violet","topics":[{"name":"string","subtopics":["string"]}]}]}. Valid icons: timer, calculator, chart, book, flask, globe, code, brain, target, pen. Valid colors: amber, sky, peach, mint, rose, violet.`;
+  const fileData = dataUrl.split(",")[1];
+  const input = mimeType.startsWith("image/") || mimeType === "application/pdf" ? [prompt, { inlineData: { mimeType, data: fileData } }] : `${prompt}\n\nFile type: ${mimeType}. Base64 file content:\n${fileData.slice(0, 180000)}`;
+  const invoke = async (modelName) => {
+    const startedAt = Date.now();
+    try {
+      const model = gemini.getGenerativeModel({ model: modelName, generationConfig: { responseMimeType: "application/json" } });
+      const result = await model.generateContent(input);
+      const analysis = JSON.parse(result.response.text());
+      if (!analysis?.title || !Array.isArray(analysis.categories) || !analysis.categories.length) throw new Error("Gemini returned malformed analysis");
+      console.info("Gemini analysis succeeded", { model: modelName, durationMs: Date.now() - startedAt });
+      return analysis;
+    } catch (error) {
+      console.warn("Gemini analysis attempt failed", { model: modelName, durationMs: Date.now() - startedAt, status: error?.status, retryable: isRetryableGeminiError(error) });
+      throw error;
+    }
+  };
+  let lastError;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try { return await invoke(PRIMARY_GEMINI_MODEL); }
+    catch (error) { lastError = error; if (!isRetryableGeminiError(error) || attempt === RETRY_DELAYS_MS.length) break; await delay(RETRY_DELAYS_MS[attempt]); }
+  }
+  if (isRetryableGeminiError(lastError)) return invoke(FALLBACK_GEMINI_MODEL);
+  throw lastError;
+}
 
 app.post("/api/analyze", asyncRoute(async (req, res) => {
   const { fileName, mimeType, dataUrl } = req.body || {};
@@ -90,13 +126,7 @@ app.post("/api/analyze", asyncRoute(async (req, res) => {
   if (typeof fileName !== "string" || typeof mimeType !== "string" || typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) return analysisError(res, 400, "INVALID_UPLOAD", "Choose a valid file and try again.");
   if (!mimeType.startsWith("image/") && !supportedMimeTypes.has(mimeType)) return analysisError(res, 415, "UNSUPPORTED_FILE", "This file type isn't supported.");
   try {
-    const model = gemini.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash", generationConfig: { responseMimeType: "application/json" } });
-    const prompt = `Create a concise Study OS dashboard from ${fileName}. Group the material into 2-6 useful categories. Topics must be short, and subtopics must be strings. Return a JSON object exactly shaped as: {"title":"string","subtitle":"string","categories":[{"name":"string","icon":"book","color":"violet","topics":[{"name":"string","subtopics":["string"]}]}]}. Valid icons: timer, calculator, chart, book, flask, globe, code, brain, target, pen. Valid colors: amber, sky, peach, mint, rose, violet.`;
-    const fileData = dataUrl.split(",")[1];
-    const result = await model.generateContent(mimeType.startsWith("image/") || mimeType === "application/pdf" ? [prompt, { inlineData: { mimeType, data: fileData } }] : `${prompt}\n\nFile type: ${mimeType}. Base64 file content:\n${fileData.slice(0, 180000)}`);
-    const text = result.response.text();
-    const analysis = JSON.parse(text);
-    if (!analysis?.title || !Array.isArray(analysis.categories) || !analysis.categories.length) throw new Error("Gemini returned malformed analysis");
+    const analysis = await analyzeWithGemini({ fileName, mimeType, dataUrl });
     res.json(analysis);
   } catch (error) {
     console.error("Gemini analysis failed:", error?.status || "unknown", error?.message || error);

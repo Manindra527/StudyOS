@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, Send, Loader2 } from "lucide-react";
 import type { Workspace } from "@/lib/study-types";
 import { readApiError } from "@/lib/user-facing-errors";
+import { apiUrl } from "@/lib/api-client";
 
 interface Msg {
   role: "user" | "assistant";
@@ -40,7 +41,7 @@ export function MentorChat({ workspace }: { workspace: Workspace | null }) {
             )
             .join("\n")
         : "No workspace loaded.";
-      const res = await fetch("/api/mentor", {
+      const res = await fetch(apiUrl("/api/mentor"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next, context: ctx }),

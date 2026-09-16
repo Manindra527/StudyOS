@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { normalizeSection, type Workspace, type Topic } from "./study-types";
+import { apiUrl } from "./api-client";
 
 const LEGACY_KEY = "study-os:workspaces";
 const LEGACY_ACTIVE_KEY = "study-os:active";
@@ -7,7 +8,7 @@ const MIGRATED_KEY = "study-os:mongo-migrated";
 type Snapshot = { workspaces: Workspace[]; activeWorkspaceId: string | null };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, { headers: { "Content-Type": "application/json", ...(options?.headers || {}) }, ...options });
+  const response = await fetch(apiUrl(path), { headers: { "Content-Type": "application/json", ...(options?.headers || {}) }, ...options });
   if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(typeof body.message === "string" ? body.message : "Unable to save your study data."); }
   return response.status === 204 ? (undefined as T) : response.json() as Promise<T>;
 }

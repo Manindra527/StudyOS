@@ -4,6 +4,7 @@ import { Upload, FileText, Image as ImageIcon, Sparkles, Loader2 } from "lucide-
 import { fromRaw, type RawAnalysis } from "@/lib/study-types";
 import type { Workspace } from "@/lib/study-types";
 import { readApiError } from "@/lib/user-facing-errors";
+import { apiUrl } from "@/lib/api-client";
 
 interface Props {
   onWorkspace: (w: Workspace) => void;
@@ -78,7 +79,7 @@ export function Uploader({ onWorkspace }: Props) {
     setLoading(true);
     try {
       const dataUrl = await fileToDataUrl(file);
-      const res = await fetch("/api/analyze", {
+      const res = await fetch(apiUrl("/api/analyze"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -83,8 +83,8 @@ const analysisSchema = {
 };
 const analysisError = (res, status, code, message) => res.status(status).json({ success: false, error: { code, message } });
 const supportedMimeTypes = new Set(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "text/plain", "text/markdown"]);
-const PRIMARY_GEMINI_MODEL = "gemini-3.6-flash";
-const FALLBACK_GEMINI_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.6-flash";
+const PRIMARY_GEMINI_MODEL = "gemini-3.8-flash";
+const FALLBACK_GEMINI_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.7-flash";
 const RETRY_DELAYS_MS = [250, 500];
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const isRetryableGeminiError = (error) => {
@@ -140,7 +140,7 @@ app.post("/api/mentor", asyncRoute(async (req, res) => {
   if (!Array.isArray(messages)) return analysisError(res, 400, "INVALID_REQUEST", "A conversation is required.");
   try {
     const conversation = messages.slice(-20).map((message) => `${message.role === "assistant" ? "Mentor" : "Student"}: ${String(message.content || "")}`).join("\n");
-    const model = gemini.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-3.6-flash" });
+    const model = gemini.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-3.8-flash" });
     const result = await model.generateContent(`You are an encouraging Study OS mentor. Give concise, actionable study guidance in under 180 words.\n\nWorkspace context:\n${String(context || "")}\n\nConversation:\n${conversation}`);
     const text = result.response.text();
     if (!text) throw new Error("Gemini returned no mentor text");
